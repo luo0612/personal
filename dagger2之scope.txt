@@ -1,0 +1,78 @@
+一般需要创建单例时,我们需要在 Module 和蔼Component 中都添加 @Singleton 注解
+
+
+@Module 
+public class PersonModule { 
+	@Provides 
+	@Singleton 
+	public Person providePerson() { 
+		return new Person(); 
+	} 
+} 
+@Singleton 
+@Component(modules = PersonModule.class) 
+public interface MainComponent { 
+	void inject(MainActivity activity); 
+} 
+
+然后在 Application 类中创建 MainComponent 对象 ,
+这样在其它Activity中就可以通过获取Application的对象来inject自己,
+这样创建出来的Person类就是一个单例子。
+
+// Application 
+MainComponent mMainComponent; 
+SubComponent mSubComponent; 
+@Override 
+public void onCreate() { 
+	super.onCreate(); 
+	//注意多进程, 会初始化多次
+} 
+public MainComponent getMainComponent() { 
+	if(mMainComponent == null) 
+		mMainComponent = DaggerMainComponent.builder().build(); 
+	return mMainComponent; 
+} 
+// Activity 
+((App)getApplication()).getMainComponent().inject(this); 
+
+但是如果你不在Application中创建 MainComponent ,
+也就是在每个Activity都创建自己的MainComponent时,
+创建出来的Person类是不同的对象 ,
+说明在不同的MainComponent对象的时候,退即使使用了@Singleton 注解 ,
+最后创建的也不是单例。
+
+为了查明这个原因 ,我们查看Singleton的源码 :
+
+
+@Scope 
+@Documented 
+@Retention(RUNTIME) 
+public @interface Singleton {} 
+它本身是一个Scope , 也没有特别的代码。
+那是不是我们自定义一个Scpoe也可以实现Singleton的效果呢,答案是肯定的。
+
+// 自定义的Scope 
+@Scope 
+@Retention(RetentionPolicy.RUNTIME) 
+public @interface UserScope {} 
+
+自定义的Scope 使用方法与Singleton一样,把@Singleton换成@UserScope就可以了。
+通过多次验证的结果证明 : 
+用同一个component ,并声明同一个Scope ,创建出来的是同一个对象。
+
+另外在看其它博客文章的时候,
+你会经常看到 @ActivityScope 可以声明一个Activity生命周期的对象 ,
+@ApplicationScope 可以声明一个Application生命周期的对象 , 
+难道这些Scope这么神? 定义一个名字就可以控制对象的生命周期了? 
+其实这和 @Singleton一样的,都是代码是否通过同一个 component 对象来控制的。
+比如 @ActivityScope 定义的对象 ,其在Activity创建了component对象 ,
+那这个component对象肯定在这个Activity的生命周期内啊,
+依赖创建出来的对象也肯定是这个Activity啊。
+还有@ApplicationScope 中的component 对象是在 Application中的,
+那依赖创建出来的对象的生命周期也肯定是和 @Singleton的一样的,
+单例的生命周期不就是整个 Application 吗。
+
+所以 Scope 的定义的名字不是控制对象生命周期的关键,
+取名 ActivityScope 、ApplicationScope、Singleton 只是让我们更好理解,
+提高代码可读性,真正控制对象生命周期的是 Component对象 
+
